@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wl2支援卡组加成计算器</title>
+    <!-- 引入 Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // 配置 Tailwind CSS
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans SC', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+
+        // ----------------------------------------------------
+        // Python 逻辑迁移到 JavaScript
+        // ----------------------------------------------------
+
+        // 1. 定义所有稀有度的加成系数配置 (来自 app.py)
+        const BONUS_CONFIG = {
+            "四星卡": {
+                "base_bonus": 7.5,
+                "skill_table": [0.00, 0.25, 1.00, 2.50], // 技能等级 1-4
+                "spec_table": [0.00, 0.5, 1.0, 1.5, 2.0, 2.5] // 专精等级 0-5
+            },
+            "生日卡": {
+                "base_bonus": 5,
+                "skill_table": [0.00, 0.2, 0.8, 2.00],
+                "spec_table": [0.00, 0.4, 0.8, 1.2, 1.6, 2.0]
+            },
+            "三星卡": {
+                "base_bonus": 2,
+                "skill_table": [0.00, 0.15, 0.4, 1.00],
+                "spec_table": [0.00, 0.3, 0.4, 0.6, 0.8, 1.0]
+            },
+            "二星卡": {
+                "base_bonus": 1,
+                "skill_table": [0.00, 0.1, 0.2, 0.5],
+                "spec_table": [0.0, 0.2, 0.2, 0.3, 0.4, 0.5]
+            },
+            "一星卡": {
+                "base_bonus": 0.5,
+                "skill_table": [0.00, 0.05, 0.10, 0.30],
+                "spec_table": [0.00, 0.1, 0.1, 0.2, 0.2, 0.3]
+            }
+        };
+
+        const RARITIES = ["四星卡", "生日卡", "三星卡", "二星卡", "一星卡"];
+
+        function calcBonusByRarity(rarity, skillLevels, specLevels, count) {
+            const config = BONUS_CONFIG[rarity];
+            if (!config) return 0;
+
+            const { base_bonus, skill_table, spec_table } = config;
+            let bonus = 0.0;
+
+            // 技能加成 (注意：skillLevels 数组是从 index 0 开始，对应技能等级 1-4 的数量)
+            for (let i = 0; i < 4; i++) {
+                // i+1 对应技能等级，但 skill_table index 0 对应技能等级 1
+                bonus += skillLevels[i] * skill_table[i];
+            }
+
+            // 专精加成 (注意：specLevels 数组是从 index 0 开始，对应专精等级 0-5 的数量)
+            for (let i = 0; i < 6; i++) {
+                bonus += specLevels[i] * spec_table[i];
+            }
+
+            // 基础加成
+            bonus += base_bonus * count;
+
+            return bonus;
+        }
+
+        function calculateTotalBonus(event) {
+            event.preventDefault(); // 阻止表单默认提交行为
+
+            let totalBonus = 0.0;
+            const form = event.target;
+            const resultElement = document.getElementById('result-output');
+            const totalBonusElement = document.getElementById('total-bonus');
+            const errorElement = document.getElementById('error-message');
+
+            errorElement.classList.add('hidden');
+            resultElement.classList.remove('hidden');
+
+            try {
+                // 1. 循环计算各种稀有度卡牌的加成
+                for (const rarity of RARITIES) {
+                    // 使用 parseFloat 而不是 parseInt 以支持可能的非整数输入 (虽然游戏里通常是整数，但保持兼容性)
+                    const count = parseFloat(form.elements[`${rarity}_count`].value) || 0;
+
+                    const skillLevels = [];
+                    // 技能等级 1 到 4
+                    for (let i = 1; i <= 4; i++) {
+                        skillLevels.push(parseFloat(form.elements[`${rarity}_skill_${i}`].value) || 0);
+                    }
+
+                    const specLevels = [];
+                    // 专精等级 0 到 5
+                    for (let i = 0; i <= 5; i++) {
+                        specLevels.push(parseFloat(form.elements[`${rarity}_special_${i}`].value) || 0);
+                    }
+
+                    totalBonus += calcBonusByRarity(rarity, skillLevels, specLevels, count);
+                }
+
+                // 2. 角色卡基础加成 (5% / 卡)
+                const roleCardCount = parseFloat(form.elements['角色卡_count'].value) || 0;
+                const roleCardBonus = roleCardCount * 5.0;
+                totalBonus += roleCardBonus;
+
+                // 3. WL1 特殊卡牌加成 (20%)
+                const hasWl1 = form.elements['has_wl1'].value;
+                const wl1Bonus = hasWl1 === "1" ? 20.0 : 0.0;
+                totalBonus += wl1Bonus;
+
+                // 显示结果
+                totalBonusElement.textContent = totalBonus.toFixed(2);
+                resultElement.scrollIntoView({ behavior: 'smooth' });
+
+
+            } catch (e) {
+                // 捕获潜在的输入错误
+                console.error("计算错误:", e);
+                errorElement.textContent = "计算失败，请确保所有输入框都填写了有效的数字。";
+                errorElement.classList.remove('hidden');
+                totalBonusElement.textContent = "0.00";
+            }
+        }
+    </script>
+    <style>
+        .input-field {
+            @apply w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out text-sm;
+        }
+        .fieldset-header {
+            @apply text-xl font-semibold mb-4 text-indigo-700 border-b pb-2;
+        }
+        .label-text {
+            @apply block text-sm font-medium text-gray-700 my-1;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen py-8 font-sans">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <header class="text-center mb-10">
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-2">
+                第二期 World Link 支援卡组加成计算
+            </h1>
+            <p class="text-sm text-gray-500 bg-yellow-100 p-3 rounded-lg border border-yellow-300 shadow-sm">
+                <!-- 提示信息和署名 -->
+                注：请仔细核对各稀有度卡牌总数是否≤20.
+                <br>
+                <span class="text-xs text-gray-600 font-medium italic">by サクラかぜ</span>
+            </p>
+        </header>
+
+        <!-- 结果展示区域 -->
+        <div id="result-output" class="hidden bg-white p-6 sm:p-8 rounded-xl shadow-2xl text-center mb-10 border-4 border-green-400">
+            <h2 class="text-3xl font-extrabold text-gray-900 mb-6">计算结果</h2>
+            <p class="text-lg text-gray-600 mb-4">您的卡组总加成为：</p>
+
+            <div class="bg-indigo-600 text-white p-6 rounded-2xl shadow-xl transform hover:scale-105 transition duration-300 inline-block">
+                <span id="total-bonus" class="text-7xl font-black">0.00</span>
+                <span class="text-4xl font-bold">%</span>
+            </div>
+
+            <div id="error-message" class="text-red-600 border border-red-300 bg-red-50 p-3 rounded-lg mt-4 hidden"></div>
+            <button onclick="document.getElementById('result-output').classList.add('hidden')" class="mt-8 inline-block bg-gray-200 text-gray-800 py-2 px-4 rounded-lg font-medium hover:bg-gray-300 transition duration-200">
+                继续修改输入
+            </button>
+        </div>
+
+
+        <!-- 表单：使用 JS 监听提交事件 -->
+        <form onsubmit="calculateTotalBonus(event)" class="bg-white p-6 sm:p-8 rounded-xl shadow-2xl space-y-8">
+
+            <!-- 角色卡数量和 WL1 特殊卡牌 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 border border-indigo-200 rounded-lg bg-indigo-50">
+                <fieldset>
+                    <legend class="fieldset-header text-indigo-800">对应角色卡牌数量 (角色加成)</legend>
+                    <p class="text-sm text-gray-600 mb-3">该部分是“章节与角色一致”的加成，每张卡加5%。例如【初音未来】章节，支援卡组中每张初音未来的卡会额外具有5%加成。</p>
+                    <label for="角色卡_count" class="label-text">对应角色卡牌总数 (最多20张)：</label>
+                    <input type="number" name="角色卡_count" id="角色卡_count" min="0" max="20" value="20" required class="input-field">
+                </fieldset>
+
+                <fieldset>
+                    <legend class="fieldset-header text-indigo-800">WL1 限定卡牌额外加成</legend>
+                    <p class="text-sm text-gray-600 mb-3">WL1 限定卡牌（位于支援卡组且“章节与角色一致”）时，会有 20% 额外加成。</p>
+                    <label for="has_wl1" class="label-text">请选择是否包含该角色的 wl1 限定卡牌：</label>
+                    <select name="has_wl1" id="has_wl1" required class="input-field">
+                        <option value="1">是 (加成 +20%)</option>
+                        <option value="0">否 (加成 +0%)</option>
+                    </select>
+                </fieldset>
+            </div>
+
+            <!-- 稀有度卡牌配置 -->
+            <h2 class="text-2xl font-bold text-gray-800 pt-4 border-t mt-8">按稀有度配置卡牌详情</h2>
+
+            <div class="space-y-6">
+                <!-- 四星卡 -->
+                <fieldset class="p-6 border border-gray-200 rounded-xl shadow-md bg-white">
+                    <legend class="fieldset-header">四星卡</legend>
+                    <label class="label-text">上场卡牌数量（单张四星卡稀有度加成为7.5%）：</label>
+                    <input type="number" name="四星卡_count" min="0" max="20" value="20" required class="input-field mb-4">
+
+                    <div class="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+                        <strong class="col-span-2 text-md font-medium text-gray-700">各技能等级卡牌数量（单张四星卡技能等级1~4加成分别为0%；0.25%；1%；2.5%）：</strong>
+                        <div><label class="label-text">技能等级1：</label><input type="number" name="四星卡_skill_1" min="0" max="20" value="20" class="input-field"></div>
+                        <div><label class="label-text">技能等级2：</label><input type="number" name="四星卡_skill_2" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">技能等级3：</label><input type="number" name="四星卡_skill_3" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">技能等级4：</label><input type="number" name="四星卡_skill_4" min="0" max="20" value="0" class="input-field"></div>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg mt-4">
+                        <strong class="col-span-full text-md font-medium text-gray-700">各专精等级卡牌数量（单张四星卡专精等级0~5加成分别为0%；0.5%；1%；1.5%；2%；2.5%）：</strong>
+                        <div><label class="label-text">专精等级0：</label><input type="number" name="四星卡_special_0" min="0" max="20" value="20" class="input-field"></div>
+                        <div><label class="label-text">专精等级1：</label><input type="number" name="四星卡_special_1" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级2：</label><input type="number" name="四星卡_special_2" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级3：</label><input type="number" name="四星卡_special_3" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级4：</label><input type="number" name="四星卡_special_4" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级5：</label><input type="number" name="四星卡_special_5" min="0" max="20" value="0" class="input-field"></div>
+                    </div>
+                </fieldset>
+
+                <!-- 生日卡 (已补全) -->
+                <fieldset class="p-6 border border-gray-200 rounded-xl shadow-md bg-white">
+                    <legend class="fieldset-header">生日卡</legend>
+                    <label class="label-text">上场卡牌数量（单张生日卡稀有度加成为5%）：</label>
+                    <input type="number" name="生日卡_count" min="0" max="20" value="0" required class="input-field mb-4">
+
+                    <div class="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+                        <strong class="col-span-2 text-md font-medium text-gray-700">各技能等级卡牌数量（单张生日卡技能等级1~4加成分别为0%；0.2%；0.8%；2%）：</strong>
+                        <div><label class="label-text">技能等级1：</label><input type="number" name="生日卡_skill_1" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">技能等级2：</label><input type="number" name="生日卡_skill_2" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">技能等级3：</label><input type="number" name="生日卡_skill_3" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">技能等级4：</label><input type="number" name="生日卡_skill_4" min="0" max="20" value="0" class="input-field"></div>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg mt-4">
+                        <strong class="col-span-full text-md font-medium text-gray-700">各专精等级卡牌数量（单张生日卡专精等级0~5加成分别为0%；0.4%；0.8%；1.2%；1.6%；2.0%）：</strong>
+                        <div><label class="label-text">专精等级0：</label><input type="number" name="生日卡_special_0" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级1：</label><input type="number" name="生日卡_special_1" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级2：</label><input type="number" name="生日卡_special_2" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级3：</label><input type="number" name="生日卡_special_3" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级4：</label><input type="number" name="生日卡_special_4" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级5：</label><input type="number" name="生日卡_special_5" min="0" max="20" value="0" class="input-field"></div>
+                    </div>
+                </fieldset>
+
+                <!-- 三星卡 (已补全) -->
+                <fieldset class="p-6 border border-gray-200 rounded-xl shadow-md bg-white">
+                    <legend class="fieldset-header">三星卡</legend>
+                    <label class="label-text">上场卡牌数量（单张三星卡稀有度加成为2%）：</label>
+                    <input type="number" name="三星卡_count" min="0" max="20" value="0" required class="input-field mb-4">
+
+                    <div class="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+                        <strong class="col-span-2 text-md font-medium text-gray-700">各技能等级卡牌数量（单张三星卡技能等级1~4加成分别为0%；0.15%；0.4%；1%）：</strong>
+                        <div><label class="label-text">技能等级1：</label><input type="number" name="三星卡_skill_1" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">技能等级2：</label><input type="number" name="三星卡_skill_2" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">技能等级3：</label><input type="number" name="三星卡_skill_3" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">技能等级4：</label><input type="number" name="三星卡_skill_4" min="0" max="20" value="0" class="input-field"></div>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg mt-4">
+                        <strong class="col-span-full text-md font-medium text-gray-700">各专精等级卡牌数量（单张三星卡技能等级0~5加成分别为0%；0.3%；0.4%；0.6%；0.8%；1%）：</strong>
+                        <div><label class="label-text">专精等级0：</label><input type="number" name="三星卡_special_0" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级1：</label><input type="number" name="三星卡_special_1" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级2：</label><input type="number" name="三星卡_special_2" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级3：</label><input type="number" name="三星卡_special_3" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级4：</label><input type="number" name="三星卡_special_4" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级5：</label><input type="number" name="三星卡_special_5" min="0" max="20" value="0" class="input-field"></div>
+                    </div>
+                </fieldset>
+
+                <!-- 二星卡 (已补全) -->
+                <fieldset class="p-6 border border-gray-200 rounded-xl shadow-md bg-white">
+                    <legend class="fieldset-header">二星卡</legend>
+                    <label class="label-text">上场卡牌数量（单张二星卡稀有度加成为1%）：</label>
+                    <input type="number" name="二星卡_count" min="0" max="20" value="0" required class="input-field mb-4">
+
+                    <div class="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+                        <strong class="col-span-2 text-md font-medium text-gray-700">各技能等级卡牌数量（单张二星卡技能等级1~4加成分别为0%；0.1%；0.2%；0.5%）：</strong>
+                        <div><label class="label-text">技能等级1：</label><input type="number" name="二星卡_skill_1" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">技能等级2：</label><input type="number" name="二星卡_skill_2" min="0" max="20" value="0" class="input-field"></div>
+                        <div><div><label class="label-text">技能等级3：</label><input type="number" name="二星卡_skill_3" min="0" max="20" value="0" class="input-field"></div></div>
+                        <div><label class="label-text">技能等级4：</label><input type="number" name="二星卡_skill_4" min="0" max="20" value="0" class="input-field"></div>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg mt-4">
+                        <strong class="col-span-full text-md font-medium text-gray-700">各专精等级卡牌数量（单张二星卡专精等级0~5加成分别为0%；0.2%；0.2%；0.3%；0.4%；0.5%）：</strong>
+                        <div><label class="label-text">专精等级0：</label><input type="number" name="二星卡_special_0" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级1：</label><input type="number" name="二星卡_special_1" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级2：</label><input type="number" name="二星卡_special_2" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级3：</label><input type="number" name="二星卡_special_3" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级4：</label><input type="number" name="二星卡_special_4" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级5：</label><input type="number" name="二星卡_special_5" min="0" max="20" value="0" class="input-field"></div>
+                    </div>
+                </fieldset>
+
+                <!-- 一星卡 (已补全) -->
+                <fieldset class="p-6 border border-gray-200 rounded-xl shadow-md bg-white">
+                    <legend class="fieldset-header">一星卡</legend>
+                    <label class="label-text">上场卡牌数量（单张一星卡稀有度加成为0.5%）：</label>
+                    <input type="number" name="一星卡_count" min="0" max="20" value="0" required class="input-field mb-4">
+
+                    <div class="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+                        <strong class="col-span-2 text-md font-medium text-gray-700">各技能等级卡牌数量（单张一星卡技能等级1~4加成分别为0%；0.05%；0.1%；0.3%）：</strong>
+                        <div><label class="label-text">技能等级1：</label><input type="number" name="一星卡_skill_1" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">技能等级2：</label><input type="number" name="一星卡_skill_2" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">技能等级3：</label><input type="number" name="一星卡_skill_3" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">技能等级4：</label><input type="number" name="一星卡_skill_4" min="0" max="20" value="0" class="input-field"></div>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg mt-4">
+                        <strong class="col-span-full text-md font-medium text-gray-700">各专精等级卡牌数量（单张四星卡专精等级0~5加成分别为0%；0.1%；0.1%；0.2%；0.2%；0.3%）：</strong>
+                        <div><label class="label-text">专精等级0：</label><input type="number" name="一星卡_special_0" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级1：</label><input type="number" name="一星卡_special_1" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级2：</label><input type="number" name="一星卡_special_2" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级3：</label><input type="number" name="一星卡_special_3" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级4：</label><input type="number" name="一星卡_special_4" min="0" max="20" value="0" class="input-field"></div>
+                        <div><label class="label-text">专精等级5：</label><input type="number" name="一星卡_special_5" min="0" max="20" value="0" class="input-field"></div>
+                    </div>
+                </fieldset>
+            </div>
+
+            <button type="submit" class="w-full bg-indigo-600 text-white py-3 rounded-lg text-xl font-bold hover:bg-indigo-700 transition duration-200 shadow-lg mt-8">
+                🚀 开始计算总加成
+            </button>
+        </form>
+    </div>
+</body>
+</html>
